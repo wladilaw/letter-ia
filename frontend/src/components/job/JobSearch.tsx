@@ -14,6 +14,9 @@ export const JobSearch = ({ onSelect }: JobSearchProps) => {
   const [jobs, setJobs] = useState<Job[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [selectedSource, setSelectedSource] = useState<string>('all')
 
   const [searchParams, setSearchParams] = useState<JobSearchParams>({
     query: '',
@@ -29,18 +32,30 @@ export const JobSearch = ({ onSelect }: JobSearchProps) => {
     setIsLoading(true)
 
     try {
-      const response = await apiClient.searchJobs(searchParams)
+      // Utiliser l'API de scraping
+      const response = await fetch(
+        `/api/jobs/scrape?query=${encodeURIComponent(searchParams.query)}&page=${currentPage}${
+          selectedSource !== 'all' ? `&source=${selectedSource}` : ''
+        }`
+      )
 
-      if (response.success && response.data) {
-        setJobs(response.data.jobs)
-      } else {
-        throw new Error(response.error || 'Une erreur est survenue')
+      if (!response.ok) {
+        throw new Error('Erreur lors de la recherche')
       }
+
+      const data = await response.json()
+      setJobs(data.jobs)
+      setTotalPages(data.totalPages)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setCurrentPage(newPage)
+    handleSearch(new Event('submit') as any)
   }
 
   return (
@@ -64,6 +79,22 @@ export const JobSearch = ({ onSelect }: JobSearchProps) => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium mb-2">
+                Source
+              </label>
+              <select
+                value={selectedSource}
+                onChange={(e) => setSelectedSource(e.target.value)}
+                className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="all">Toutes les sources</option>
+                <option value="HELLOWORK">HelloWork</option>
+                <option value="INDEED">Indeed</option>
+                <option value="LINKEDIN">LinkedIn</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-sm font-medium mb-2">
                 Type de contrat
@@ -95,18 +126,6 @@ export const JobSearch = ({ onSelect }: JobSearchProps) => {
                 <option value="SENIOR">Senior</option>
                 <option value="EXPERT">Expert</option>
               </select>
-            </div>
-
-            <div className="flex items-end">
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={searchParams.remote}
-                  onChange={(e) => setSearchParams({ ...searchParams, remote: e.target.checked })}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm font-medium">Télétravail possible</span>
-              </label>
             </div>
           </div>
 
@@ -155,6 +174,9 @@ export const JobSearch = ({ onSelect }: JobSearchProps) => {
                     Télétravail
                   </span>
                 )}
+                <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-full text-sm">
+                  {job.source}
+                </span>
               </div>
 
               <p className="text-gray-600 line-clamp-3">{job.description}</p>
@@ -163,17 +185,49 @@ export const JobSearch = ({ onSelect }: JobSearchProps) => {
                 <span className="text-sm text-gray-500">
                   {job.location}
                 </span>
-                <Button
-                  variant="outline"
-                  onClick={() => onSelect?.(job)}
-                >
-                  Voir l'offre
-                </Button>
+                <div className="space-x-2">
+                  {job.sourceUrl && (
+                    <Button
+                      variant="outline"
+                      onClick={() => window.open(job.sourceUrl, '_blank')}
+                    >
+                      Voir l'offre
+                    </Button>
+                  )}
+                  <Button
+                    variant="outline"
+                    onClick={() => onSelect?.(job)}
+                  >
+                    Générer une lettre
+                  </Button>
+                </div>
               </div>
             </div>
           </Card>
         ))}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex justify-center space-x-2 mt-6">
+          <Button
+            variant="outline"
+            onClick={() => handlePageChange(currentPage - 1)}
+            disabled={currentPage === 1}
+          >
+            Précédent
+          </Button>
+          <span className="px-4 py-2">
+            Page {currentPage} sur {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            onClick={() => handlePageChange(currentPage + 1)}
+            disabled={currentPage === totalPages}
+          >
+            Suivant
+          </Button>
+        </div>
+      )}
     </div>
   )
 } 

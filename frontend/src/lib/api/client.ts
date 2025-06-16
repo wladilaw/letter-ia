@@ -1,11 +1,9 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import { API_CONFIG, API_ENDPOINTS } from './config'
-import {
+import type {
   APIResponse,
-  APIError,
+  AuthResponse,
   RegisterRequest,
   LoginRequest,
-  AuthResponse,
   User,
   UserProfile,
   Letter,
@@ -21,236 +19,263 @@ import {
   SubscriptionPlan,
   SubscribeRequest,
   SubscriptionResponse,
-  UsageStats,
+  UsageStats
 } from './types'
 
 export class MotivAIClient {
-  private client: AxiosInstance
-  private accessToken?: string
+  private baseURL: string
+  private headers: Record<string, string>
 
-  constructor(accessToken?: string) {
-    this.accessToken = accessToken
-    this.client = axios.create({
-      ...API_CONFIG,
-      headers: {
-        ...API_CONFIG.headers,
-        ...(accessToken && { Authorization: `Bearer ${accessToken}` }),
-      },
-    })
-
-    this.setupInterceptors()
+  constructor() {
+    this.baseURL = API_CONFIG.baseURL
+    this.headers = API_CONFIG.headers
   }
 
-  private setupInterceptors() {
-    this.client.interceptors.response.use(
-      (response) => response,
-      async (error) => {
-        const originalRequest = error.config
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-          originalRequest._retry = true
-
-          try {
-            const { data } = await this.refreshToken()
-            this.setAccessToken(data.accessToken)
-            originalRequest.headers.Authorization = `Bearer ${data.accessToken}`
-            return this.client(originalRequest)
-          } catch (refreshError) {
-            return Promise.reject(refreshError)
-          }
+  private async request<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<APIResponse<T>> {
+    try {
+      const response = await fetch(`${this.baseURL}${endpoint}`, {
+        ...options,
+        headers: {
+          ...this.headers,
+          ...options.headers,
+          Authorization: `Bearer ${localStorage.getItem('token')}`
         }
+      })
 
-        return Promise.reject(error)
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Une erreur est survenue')
       }
-    )
+
+      return data
+    } catch (error) {
+      console.error('API Error:', error)
+      throw error
+    }
   }
 
-  setAccessToken(token: string) {
-    this.accessToken = token
-    this.client.defaults.headers.Authorization = `Bearer ${token}`
-  }
+  // ===== AUTHENTICATION =====
 
-  // Méthodes d'authentification
   async register(data: RegisterRequest): Promise<APIResponse<AuthResponse>> {
-    const response = await this.post<AuthResponse>(API_ENDPOINTS.auth.register, data)
-    return response
-  }
-
-  async login(data: LoginRequest): Promise<APIResponse<AuthResponse>> {
-    const response = await this.post<AuthResponse>(API_ENDPOINTS.auth.login, data)
-    return response
-  }
-
-  async refreshToken(): Promise<APIResponse<AuthResponse>> {
-    const response = await this.post<AuthResponse>(API_ENDPOINTS.auth.refresh, {
-      refreshToken: localStorage.getItem('refreshToken'),
+    return this.request<AuthResponse>(API_ENDPOINTS.auth.register, {
+      method: 'POST',
+      body: JSON.stringify(data)
     })
-    return response
   }
 
-  // Méthodes utilisateur
+  async login(credentials: LoginRequest): Promise<APIResponse<AuthResponse>> {
+    return this.request<AuthResponse>(API_ENDPOINTS.auth.login, {
+      method: 'POST',
+      body: JSON.stringify(credentials)
+    })
+  }
+
+  async logout(): Promise<APIResponse<void>> {
+    return this.request<void>(API_ENDPOINTS.auth.logout, {
+      method: 'POST'
+    })
+  }
+
+  async refreshToken(): Promise<APIResponse<{ token: string }>> {
+    return this.request<{ token: string }>(API_ENDPOINTS.auth.refresh, {
+      method: 'POST'
+    })
+  }
+
   async getCurrentUser(): Promise<APIResponse<User>> {
-    const response = await this.get<User>(API_ENDPOINTS.users.me)
-    return response
+    return this.request<User>(API_ENDPOINTS.auth.me)
   }
 
-  async updateUser(data: Partial<User>): Promise<APIResponse<User>> {
-    const response = await this.patch<User>(API_ENDPOINTS.users.me, data)
-    return response
+  // ===== USER MANAGEMENT =====
+
+  async updateProfile(profile: Partial<UserProfile>): Promise<APIResponse<UserProfile>> {
+    return this.request<UserProfile>(API_ENDPOINTS.users.profile, {
+      method: 'PUT',
+      body: JSON.stringify(profile)
+    })
   }
 
-  async getUserProfile(): Promise<APIResponse<UserProfile>> {
-    const response = await this.get<UserProfile>(API_ENDPOINTS.users.profile)
-    return response
+  async deleteAccount(): Promise<APIResponse<void>> {
+    return this.request<void>(API_ENDPOINTS.users.delete, {
+      method: 'DELETE'
+    })
   }
 
-  async updateUserProfile(data: Partial<UserProfile>): Promise<APIResponse<UserProfile>> {
-    const response = await this.put<UserProfile>(API_ENDPOINTS.users.profile, data)
-    return response
-  }
-
-  // Méthodes de lettres
-  async getLetters(params?: { page?: number; limit?: number; status?: string }): Promise<APIResponse<Letter[]>> {
-    const response = await this.get<Letter[]>(API_ENDPOINTS.letters.list, { params })
-    return response
-  }
+  // ===== LETTER MANAGEMENT =====
 
   async generateLetter(data: GenerateLetterRequest): Promise<APIResponse<Letter>> {
-    const response = await this.post<Letter>(API_ENDPOINTS.letters.create, data)
-    return response
+    return this.request<Letter>(API_ENDPOINTS.letters.create, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
   }
 
-  async getLetter(id: string): Promise<APIResponse<Letter>> {
-    const response = await this.get<Letter>(API_ENDPOINTS.letters.get(id))
-    return response
-  }
-
-  async updateLetter(id: string, data: Partial<Letter>): Promise<APIResponse<Letter>> {
-    const response = await this.put<Letter>(API_ENDPOINTS.letters.update(id), data)
-    return response
+  async updateLetter(id: string, content: string): Promise<APIResponse<Letter>> {
+    return this.request<Letter>(API_ENDPOINTS.letters.update, {
+      method: 'PUT',
+      body: JSON.stringify({ id, content })
+    })
   }
 
   async deleteLetter(id: string): Promise<APIResponse<void>> {
-    const response = await this.delete<void>(API_ENDPOINTS.letters.delete(id))
-    return response
+    return this.request<void>(API_ENDPOINTS.letters.delete, {
+      method: 'DELETE',
+      body: JSON.stringify({ id })
+    })
   }
 
-  async improveLetter(id: string, data: { suggestions: string[]; improvementType: string }): Promise<APIResponse<Letter>> {
-    const response = await this.post<Letter>(API_ENDPOINTS.letters.improve(id), data)
-    return response
+  async getLetters(page = 1, limit = 10): Promise<APIResponse<Letter[]>> {
+    return this.request<Letter[]>(`${API_ENDPOINTS.letters.list}?page=${page}&limit=${limit}`)
+  }
+
+  async getLetter(id: string): Promise<APIResponse<Letter>> {
+    return this.request<Letter>(API_ENDPOINTS.letters.get.replace(':id', id))
   }
 
   async analyzeLetter(id: string): Promise<APIResponse<LetterAnalysis>> {
-    const response = await this.post<LetterAnalysis>(API_ENDPOINTS.letters.analyze(id))
-    return response
-  }
-
-  async exportLetter(id: string, format: 'pdf' | 'docx' = 'pdf'): Promise<Blob> {
-    const response = await this.client.get(API_ENDPOINTS.letters.export(id), {
-      params: { format },
-      responseType: 'blob',
+    return this.request<LetterAnalysis>(API_ENDPOINTS.letters.analyze, {
+      method: 'POST',
+      body: JSON.stringify({ id })
     })
-    return response.data
   }
 
-  // Méthodes d'emploi
-  async getJobs(params?: JobSearchParams): Promise<APIResponse<JobsList>> {
-    const response = await this.get<JobsList>(API_ENDPOINTS.jobs.list, { params })
-    return response
+  async improveLetter(id: string): Promise<APIResponse<Letter>> {
+    return this.request<Letter>(API_ENDPOINTS.letters.improve, {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    })
+  }
+
+  // ===== JOB MANAGEMENT =====
+
+  async searchJobs(params: JobSearchParams): Promise<APIResponse<JobsList>> {
+    const queryParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        queryParams.append(key, Array.isArray(value) ? value.join(',') : String(value))
+      }
+    })
+
+    return this.request<JobsList>(`${API_ENDPOINTS.jobs.search}?${queryParams.toString()}`)
   }
 
   async getJob(id: string): Promise<APIResponse<Job>> {
-    const response = await this.get<Job>(API_ENDPOINTS.jobs.get(id))
-    return response
-  }
-
-  async applyToJob(id: string, data: { letterId: string; cvId?: string }): Promise<APIResponse<void>> {
-    const response = await this.post<void>(API_ENDPOINTS.jobs.apply(id), data)
-    return response
-  }
-
-  async getSavedJobs(): Promise<APIResponse<Job[]>> {
-    const response = await this.get<Job[]>(API_ENDPOINTS.jobs.saved)
-    return response
+    return this.request<Job>(API_ENDPOINTS.jobs.get.replace(':id', id))
   }
 
   async saveJob(id: string): Promise<APIResponse<void>> {
-    const response = await this.post<void>(API_ENDPOINTS.jobs.save(id))
-    return response
+    return this.request<void>(API_ENDPOINTS.jobs.save, {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    })
   }
 
-  // Méthodes d'entreprise
-  async getCompanies(params?: { search?: string; industry?: string }): Promise<APIResponse<CompaniesList>> {
-    const response = await this.get<CompaniesList>(API_ENDPOINTS.companies.list, { params })
-    return response
+  async applyToJob(id: string, letterId: string): Promise<APIResponse<void>> {
+    return this.request<void>(API_ENDPOINTS.jobs.apply, {
+      method: 'POST',
+      body: JSON.stringify({ jobId: id, letterId })
+    })
+  }
+
+  // ===== COMPANY MANAGEMENT =====
+
+  async searchCompanies(query: string, page = 1, limit = 10): Promise<APIResponse<CompaniesList>> {
+    return this.request<CompaniesList>(
+      `${API_ENDPOINTS.companies.search}?query=${query}&page=${page}&limit=${limit}`
+    )
   }
 
   async getCompany(id: string): Promise<APIResponse<Company>> {
-    const response = await this.get<Company>(API_ENDPOINTS.companies.get(id))
-    return response
+    return this.request<Company>(API_ENDPOINTS.companies.get.replace(':id', id))
   }
 
   async followCompany(id: string): Promise<APIResponse<void>> {
-    const response = await this.post<void>(API_ENDPOINTS.companies.follow(id))
-    return response
+    return this.request<void>(API_ENDPOINTS.companies.follow, {
+      method: 'POST',
+      body: JSON.stringify({ id })
+    })
   }
 
-  // Méthodes de template
-  async getTemplates(params?: { category?: string; isPublic?: boolean }): Promise<APIResponse<TemplatesList>> {
-    const response = await this.get<TemplatesList>(API_ENDPOINTS.templates.list, { params })
-    return response
+  // ===== TEMPLATE MANAGEMENT =====
+
+  async getTemplates(page = 1, limit = 10): Promise<APIResponse<TemplatesList>> {
+    return this.request<TemplatesList>(
+      `${API_ENDPOINTS.templates.list}?page=${page}&limit=${limit}`
+    )
   }
 
-  async createTemplate(data: Partial<Template>): Promise<APIResponse<Template>> {
-    const response = await this.post<Template>(API_ENDPOINTS.templates.create, data)
-    return response
+  async getTemplate(id: string): Promise<APIResponse<Template>> {
+    return this.request<Template>(API_ENDPOINTS.templates.get.replace(':id', id))
   }
 
-  // Méthodes d'abonnement
+  async createTemplate(template: Partial<Template>): Promise<APIResponse<Template>> {
+    return this.request<Template>(API_ENDPOINTS.templates.create, {
+      method: 'POST',
+      body: JSON.stringify(template)
+    })
+  }
+
+  async updateTemplate(id: string, template: Partial<Template>): Promise<APIResponse<Template>> {
+    return this.request<Template>(API_ENDPOINTS.templates.update, {
+      method: 'PUT',
+      body: JSON.stringify({ id, ...template })
+    })
+  }
+
+  async deleteTemplate(id: string): Promise<APIResponse<void>> {
+    return this.request<void>(API_ENDPOINTS.templates.delete, {
+      method: 'DELETE',
+      body: JSON.stringify({ id })
+    })
+  }
+
+  // ===== SUBSCRIPTION MANAGEMENT =====
+
   async getSubscriptionPlans(): Promise<APIResponse<SubscriptionPlan[]>> {
-    const response = await this.get<SubscriptionPlan[]>(API_ENDPOINTS.subscriptions.plans)
-    return response
+    return this.request<SubscriptionPlan[]>(API_ENDPOINTS.subscriptions.plans)
   }
 
   async subscribe(data: SubscribeRequest): Promise<APIResponse<SubscriptionResponse>> {
-    const response = await this.post<SubscriptionResponse>(API_ENDPOINTS.subscriptions.subscribe, data)
-    return response
+    return this.request<SubscriptionResponse>(API_ENDPOINTS.subscriptions.subscribe, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    })
   }
 
   async cancelSubscription(): Promise<APIResponse<void>> {
-    const response = await this.post<void>(API_ENDPOINTS.subscriptions.cancel)
-    return response
+    return this.request<void>(API_ENDPOINTS.subscriptions.cancel, {
+      method: 'POST'
+    })
   }
 
-  // Méthodes d'analyse
+  async getSubscriptionStatus(): Promise<APIResponse<SubscriptionResponse>> {
+    return this.request<SubscriptionResponse>(API_ENDPOINTS.subscriptions.status)
+  }
+
+  // ===== ANALYTICS =====
+
   async getUsageStats(): Promise<APIResponse<UsageStats>> {
-    const response = await this.get<UsageStats>(API_ENDPOINTS.analytics.usage)
-    return response
+    return this.request<UsageStats>(API_ENDPOINTS.analytics.usage)
   }
 
-  // Méthodes utilitaires
-  private async get<T>(url: string, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
-    const response = await this.client.get<APIResponse<T>>(url, config)
-    return response.data
+  async getPerformanceStats(): Promise<APIResponse<any>> {
+    return this.request<any>(API_ENDPOINTS.analytics.performance)
   }
 
-  private async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
-    const response = await this.client.post<APIResponse<T>>(url, data, config)
-    return response.data
+  async submitFeedback(feedback: {
+    type: string
+    content: string
+    rating?: number
+  }): Promise<APIResponse<void>> {
+    return this.request<void>(API_ENDPOINTS.analytics.feedback, {
+      method: 'POST',
+      body: JSON.stringify(feedback)
+    })
   }
+}
 
-  private async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
-    const response = await this.client.put<APIResponse<T>>(url, data, config)
-    return response.data
-  }
-
-  private async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
-    const response = await this.client.patch<APIResponse<T>>(url, data, config)
-    return response.data
-  }
-
-  private async delete<T>(url: string, config?: AxiosRequestConfig): Promise<APIResponse<T>> {
-    const response = await this.client.delete<APIResponse<T>>(url, config)
-    return response.data
-  }
-} 
+export const apiClient = new MotivAIClient() 

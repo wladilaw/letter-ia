@@ -1,29 +1,27 @@
-// Types de base
+// ===== BASE TYPES =====
+
 export interface APIResponse<T> {
-  data: T
+  success: boolean
+  data?: T
+  error?: string
   message?: string
-  pagination?: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-  }
 }
 
 export interface APIError {
-  error: string
+  code: string
   message: string
-  statusCode: number
-  timestamp: string
+  details?: any
 }
 
-// Types d'authentification
+// ===== AUTHENTICATION TYPES =====
+
 export interface RegisterRequest {
   email: string
   password: string
   firstName: string
   lastName: string
-  phone?: string
+  company?: string
+  role?: string
 }
 
 export interface LoginRequest {
@@ -33,66 +31,94 @@ export interface LoginRequest {
 
 export interface AuthResponse {
   user: User
-  accessToken: string
+  token: string
   refreshToken: string
-  expiresIn: number
 }
 
-// Types d'utilisateur
+// ===== USER TYPES =====
+
 export interface User {
   id: string
   email: string
   firstName: string
   lastName: string
-  phone?: string
-  avatarUrl?: string
-  location?: string
   role: Role
-  subscriptionPlan: Plan
-  lettersQuota: number
-  lettersUsed: number
-  isVerified: boolean
-  createdAt: string
-  updatedAt: string
+  createdAt: Date
+  updatedAt: Date
+  profile?: UserProfile
 }
 
 export interface UserProfile {
-  id: string
   userId: string
   title?: string
   bio?: string
+  location?: string
+  website?: string
+  company?: string
+  industry?: string
   experienceLevel?: string
   skills?: string[]
   languages?: Language[]
+  education?: Education[]
+  experience?: Experience[]
   careerObjectives?: string
-  preferences?: Record<string, any>
+  preferences?: UserPreferences
 }
 
 export interface Language {
-  code: string
   name: string
-  level: 'A1' | 'A2' | 'B1' | 'B2' | 'C1' | 'C2'
+  level: 'NATIVE' | 'FLUENT' | 'ADVANCED' | 'INTERMEDIATE' | 'BASIC'
 }
 
-// Types de lettres
+export interface Education {
+  school: string
+  degree: string
+  field: string
+  startDate: Date
+  endDate?: Date
+  description?: string
+}
+
+export interface Experience {
+  company: string
+  title: string
+  startDate: Date
+  endDate?: Date
+  description?: string
+  achievements?: string[]
+}
+
+export interface UserPreferences {
+  emailNotifications: boolean
+  jobAlerts: boolean
+  newsletter: boolean
+  theme: 'light' | 'dark' | 'system'
+  language: string
+}
+
+// ===== LETTER TYPES =====
+
 export interface Letter {
   id: string
   userId: string
+  jobId?: string
+  templateId?: string
   title: string
   content: string
   status: LetterStatus
   tone: Tone
   wordCount: number
   aiScore?: number
-  createdAt: string
-  updatedAt: string
+  createdAt: Date
+  updatedAt: Date
+  analysis?: LetterAnalysis
 }
 
 export interface GenerateLetterRequest {
   jobTitle: string
   companyName: string
   jobDescription: string
-  tone?: Tone
+  tone: Tone
   templateId?: string
   personalNotes?: string
 }
@@ -102,153 +128,201 @@ export interface LetterAnalysis {
   strengths: string[]
   improvements: string[]
   readability: {
-    score: number
-    level: string
+    fleschScore: number
+    complexity: 'simple' | 'moderate' | 'complex'
+    avgWordsPerSentence: number
   }
-  keywords: string[]
+  keywords: {
+    matched: string[]
+    missing: string[]
+    density: number
+  }
+  sentiment: {
+    score: number
+    label: 'negative' | 'neutral' | 'positive'
+  }
+  structure: {
+    hasOpening: boolean
+    hasBody: boolean
+    hasClosing: boolean
+    paragraphCount: number
+  }
 }
 
-// Types d'emploi
+// ===== JOB TYPES =====
+
 export interface Job {
   id: string
-  companyId: string
   title: string
-  description: string
-  requirements?: string
-  location?: string
-  remoteType?: string
-  contractType?: string
-  salaryRange?: string
   company: Company
-  postedAt: string
+  location: string
+  type: string
+  description: string
+  requirements: string[]
+  benefits: string[]
+  salary?: {
+    min: number
+    max: number
+    currency: string
+  }
+  status: JobStatus
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface JobSearchParams {
   query?: string
   location?: string
-  remote?: boolean
-  contractType?: string
+  type?: string
+  company?: string
+  salary?: {
+    min?: number
+    max?: number
+  }
+  experience?: string
+  skills?: string[]
   page?: number
   limit?: number
 }
 
 export interface JobsList {
   jobs: Job[]
-  pagination: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-  }
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
 }
 
-// Types d'entreprise
+// ===== COMPANY TYPES =====
+
 export interface Company {
   id: string
   name: string
-  slug: string
-  description?: string
-  logoUrl?: string
-  website?: string
-  industry?: string
+  description: string
+  website: string
+  logo?: string
+  industry: string
   size?: string
-  location?: string
-  rating?: number
+  location: string
+  founded?: number
+  type?: string
+  status: 'ACTIVE' | 'INACTIVE'
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface CompaniesList {
   companies: Company[]
-  pagination: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-  }
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
 }
 
-// Types de template
+// ===== TEMPLATE TYPES =====
+
 export interface Template {
   id: string
-  userId?: string
-  title: string
-  category: string
+  name: string
+  description: string
   content: string
-  description?: string
-  variables?: Record<string, any>
+  category: string
+  industry?: string
+  tone: Tone
   isPublic: boolean
-  isPremium: boolean
-  usageCount: number
-  rating?: number
-  createdAt: string
-  updatedAt: string
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface TemplatesList {
   templates: Template[]
-  pagination: {
-    page: number
-    limit: number
-    total: number
-    totalPages: number
-  }
+  total: number
+  page: number
+  limit: number
+  hasMore: boolean
 }
 
-// Types d'abonnement
+// ===== SUBSCRIPTION TYPES =====
+
 export interface SubscriptionPlan {
   id: string
   name: string
   description: string
   price: number
   currency: string
+  interval: 'MONTHLY' | 'YEARLY'
   features: string[]
-  lettersQuota: number
-  isPopular: boolean
+  limits: {
+    lettersPerMonth: number
+    templates: number
+    aiAnalysis: boolean
+    prioritySupport: boolean
+  }
 }
 
 export interface SubscribeRequest {
   planId: string
-  paymentMethodId: string
+  paymentMethod: string
+  billingAddress?: {
+    country: string
+    city: string
+    postalCode: string
+    address: string
+  }
 }
 
 export interface SubscriptionResponse {
   subscription: {
     id: string
     status: SubscriptionStatus
-    currentPeriodStart: string
-    currentPeriodEnd: string
+    plan: SubscriptionPlan
+    startDate: Date
+    endDate: Date
+    cancelAtPeriodEnd: boolean
   }
-  clientSecret: string
+  payment: {
+    id: string
+    status: PaymentStatus
+    amount: number
+    currency: string
+    date: Date
+  }
 }
 
-// Types d'analyse
+// ===== USAGE STATISTICS =====
+
 export interface UsageStats {
-  lettersGenerated: number
-  lettersImproved: number
-  tokensUsed: number
-  cost: number
-  lastUsage: string
-  usageByDay: {
-    date: string
-    count: number
-  }[]
+  totalLetters: number
+  lettersThisMonth: number
+  aiAnalysisCount: number
+  templatesUsed: number
+  subscription: {
+    plan: string
+    status: SubscriptionStatus
+    nextBillingDate: Date
+  }
 }
 
-// Énumérations
+// ===== ENUMS =====
+
 export enum Role {
   USER = 'USER',
+  PREMIUM = 'PREMIUM',
   ADMIN = 'ADMIN'
 }
 
 export enum Plan {
   FREE = 'FREE',
-  PREMIUM = 'PREMIUM',
+  BASIC = 'BASIC',
   PRO = 'PRO',
   ENTERPRISE = 'ENTERPRISE'
 }
 
 export enum LetterStatus {
   DRAFT = 'DRAFT',
-  COMPLETED = 'COMPLETED',
+  GENERATED = 'GENERATED',
+  EDITED = 'EDITED',
+  FINAL = 'FINAL',
   ARCHIVED = 'ARCHIVED'
 }
 
@@ -260,9 +334,45 @@ export enum Tone {
   CASUAL = 'CASUAL'
 }
 
+export enum JobStatus {
+  ACTIVE = 'ACTIVE',
+  CLOSED = 'CLOSED',
+  DRAFT = 'DRAFT'
+}
+
+export enum ApplicationStatus {
+  DRAFT = 'DRAFT',
+  SUBMITTED = 'SUBMITTED',
+  REVIEWING = 'REVIEWING',
+  INTERVIEW = 'INTERVIEW',
+  OFFER = 'OFFER',
+  REJECTED = 'REJECTED',
+  ACCEPTED = 'ACCEPTED'
+}
+
 export enum SubscriptionStatus {
   ACTIVE = 'ACTIVE',
-  CANCELED = 'CANCELED',
   PAST_DUE = 'PAST_DUE',
-  UNPAID = 'UNPAID'
+  CANCELED = 'CANCELED',
+  UNPAID = 'UNPAID',
+  TRIAL = 'TRIAL'
+}
+
+export enum PaymentStatus {
+  PENDING = 'PENDING',
+  SUCCEEDED = 'SUCCEEDED',
+  FAILED = 'FAILED',
+  REFUNDED = 'REFUNDED'
+}
+
+export enum ServiceType {
+  LETTER_GENERATION = 'LETTER_GENERATION',
+  LETTER_IMPROVEMENT = 'LETTER_IMPROVEMENT',
+  LETTER_ANALYSIS = 'LETTER_ANALYSIS'
+}
+
+export enum ReviewStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED'
 } 
